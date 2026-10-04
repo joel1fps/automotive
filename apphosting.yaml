@@ -1,0 +1,33 @@
+# Firebase App Hosting: create these Secret Manager entries before the first rollout.
+# See INTEGRACOES.md. No credentials belong in this file.
+runConfig:
+  minInstances: 0
+  maxInstances: 2
+  concurrency: 40
+  cpu: 1
+  memoryMiB: 512
+env:
+  - variable: MONGODB_URI
+    secret: automotive-mongodb-uri
+    availability: [RUNTIME]
+  - variable: CLERK_SECRET_KEY
+    secret: automotive-clerk-secret-key
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+    secret: automotive-clerk-publishable-key
+    availability: [BUILD, RUNTIME]
+  - variable: CLERK_WEBHOOK_SECRET
+    secret: automotive-clerk-webhook-secret
+    availability: [RUNTIME]
+  - variable: ADMIN_EMAILS
+    secret: automotive-admin-emails
+    availability: [RUNTIME]
+  - variable: NEXT_PUBLIC_SITE_URL
+    secret: automotive-site-url
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_CLERK_SIGN_IN_URL
+    value: /entrar
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_CLERK_SIGN_UP_URL
+    value: /cadastro
+    availability: [BUILD, RUNTIME]

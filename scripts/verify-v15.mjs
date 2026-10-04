@@ -1,0 +1,32 @@
+import fs from 'node:fs';
+const fixturePath='src/app/qa-local/page.tsx';
+if(fs.existsSync(fixturePath))throw Error('Temporary fixture already exists; preserve it.');
+fs.mkdirSync('src/app/qa-local',{recursive:true});
+fs.writeFileSync(fixturePath,`import {notFound} from 'next/navigation';import {Dashboard} from '@/components/dashboard';export default async function Page({searchParams}:{searchParams:Promise<{section?:string;client?:string}>}){if(process.env.NODE_ENV!=='development')notFound();const p=await searchParams;return <Dashboard admin={!p.client} section={p.section || 'servicos'} name="Teste"/>;}`);
+import {chromium} from 'playwright';
+import {expect} from '@playwright/test';
+const browser=await chromium.launch({headless:true});
+const page=await browser.newPage({viewport:{width:390,height:900},reducedMotion:'reduce'});
+page.on('pageerror',e=>console.log('BROWSER ERROR:',e.message));const services=[{_id:'111111111111111111111111',slug:'simples',name:'Lavagem Simples',category:'wash',active:true,description:'Teste',prices:{small:50,suv:65,pickup:80}},{_id:'222222222222222222222222',slug:'moto',name:'Lavagem de moto',category:'extra',active:true,description:'Sob orçamento',prices:null,vehicleTypes:['moto']}];
+let submitted;
+await page.route('**/api/**',async route=>{const url=new URL(route.request().url()); let value={};if(url.pathname.endsWith('/services'))value=services;else if(url.pathname.endsWith('/slots'))value=[];else if(url.pathname.endsWith('/loyalty/me'))value={coupons:[],vehicles:[]};else if(url.pathname.endsWith('/clients'))value={items:[],pages:0};else if(url.pathname==='/api/appointments'){submitted=route.request().postDataJSON();value={_id:'test'};}await route.fulfill({json:value});});
+try{
+await page.goto('http://127.0.0.1:3036/qa-local?client=1&section=agendar',{waitUntil:'domcontentloaded'});
+await page.locator('select[name=serviceId]').selectOption(services[0]._id);
+await expect(page.locator('.booking-total')).toContainText('50,00');
+await page.locator('select[name="vehicle.type"]').selectOption('suv');
+await expect(page.locator('.booking-total')).toContainText('65,00');
+await page.locator('select[name="vehicle.type"]').selectOption('moto');
+await page.locator('select[name=serviceId]').selectOption(services[1]._id);
+await expect(page.locator('.booking-total')).toContainText('Sob orçamento');
+await page.getByLabel('Modelo do veículo').fill('Honda CG');await page.getByLabel('Placa',{exact:true}).fill('MOT1A23');
+await page.getByLabel('Data',{exact:true}).fill('2030-10-03');await page.locator('input[type=time]').fill('10:17');
+await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Solicitar agendamento',exact:true}).click();
+await expect(page.getByText('Solicitação enviada',{exact:true})).toBeVisible();
+if(submitted.vehicle.type!=='moto'||submitted.scheduledAt!=='2030-10-03T13:17:00.000Z')throw Error('Wrong booking payload');
+await page.goto('http://127.0.0.1:3036/qa-local?section=servicos',{waitUntil:'domcontentloaded'});
+await expect(page.getByRole('button',{name:'Restaurar catálogo original'})).toBeVisible();
+await expect(page.getByRole('button',{name:'Editar',exact:true}).first()).toBeVisible(); await page.getByRole('button',{name:'Novo serviço'}).click();
+await expect(page.getByText('Imagem do card (URL HTTPS ou arquivo)')).toBeVisible();
+console.log('PASS: mobile booking price changes, motorcycle, custom time, booking payload, admin restore and image fields. API mocked.');
+}finally{await browser.close();fs.unlinkSync(fixturePath);}

@@ -1,0 +1,75 @@
+import { chromium } from 'playwright';
+import { expect } from '@playwright/test';
+import { mkdir, writeFile } from 'node:fs/promises';
+const base = process.env.BASE_URL || 'http://localhost:3032';
+const evidence = '../evidencias/versao-v7';
+await mkdir(evidence, { recursive: true });
+const browser = await chromium.launch();
+const errors = [], results = [];
+const offset = page => page.locator('.ticker-track').evaluate(el => new DOMMatrix(getComputedStyle(el).transform).m41);
+try {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto(base + '/servicos', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.loader')).toHaveCount(0);
+  const ticker = page.locator('.ticker');
+  await expect(async () => { await ticker.scrollIntoViewIfNeeded(); }).toPass({ timeout: 8000 });
+  await page.mouse.move(0, 0);
+  await expect(page.locator('.ticker-group').first().locator('.ticker-item')).toHaveCount(10);
+  await expect(page.locator('.curtain-overlay')).toHaveAttribute('data-phase', 'idle');
+  const a = await offset(page); await page.waitForTimeout(650); const b = await offset(page);
+  expect(a - b).toBeGreaterThan(20); expect(a - b).toBeLessThan(45);
+  const bounds = await page.locator('.ticker-viewport').boundingBox();
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await page.waitForTimeout(1600);
+  const stopped = await offset(page); await page.waitForTimeout(300);
+  expect(Math.abs(await offset(page) - stopped)).toBeLessThan(1);
+  const scale = await page.locator('.ticker-item').evaluateAll(nodes => Math.max(...nodes.map(n => new DOMMatrix(getComputedStyle(n).transform).a)));
+  expect(scale).toBeGreaterThan(1.06);
+  await ticker.screenshot({ path: `${evidence}/ticker-desktop.png` });
+  await page.mouse.move(0, 0); await page.waitForTimeout(1000);
+  expect(await offset(page)).toBeLessThan(stopped - 20);
+  await page.evaluate(() => window.scrollTo(0, 0)); await page.waitForTimeout(700);
+  const outside = await offset(page); await page.waitForTimeout(400);
+  expect(await offset(page)).toBe(outside);
+  await expect(async () => { await ticker.scrollIntoViewIfNeeded(); }).toPass({ timeout: 8000 });
+  await page.getByRole('button', { name: 'Pausar movimento' }).click();
+  await expect(ticker).toHaveAttribute('data-static', 'true');
+  await expect(page.locator('.ticker-group')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Retomar movimento' }).click();
+  await page.getByRole('button', { name: 'Pausar movimento' }).focus();
+  await page.keyboard.press('Tab');
+  await expect(ticker).toHaveAttribute('data-static', 'true');
+  await page.setViewportSize({ width: 390, height: 850 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(async () => { await ticker.scrollIntoViewIfNeeded(); }).toPass({ timeout: 8000 });
+  await expect(ticker).toHaveAttribute('data-static', 'true');
+  await expect(page.locator('.ticker-group')).toHaveCount(1);
+  expect(await offset(page)).toBe(0);
+  await ticker.screenshot({ path: `${evidence}/ticker-mobile-reduced.png` });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  // A one-item source exercises enough copies to fill a wide viewport and wraps quickly.
+  const services = [{ slug: 'ticker-test', name: 'Serviço de teste', category: 'extra', description: 'Fixture de teste visual', active: true, prices: null }];
+  await page.route('**/api/services', route => route.fulfill({ json: [services.find(s => s.category === 'extra')] }));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.ticker-group').first().locator('.ticker-item')).toHaveCount(1);
+  await expect(page.locator('.loader')).toHaveCount(0);
+  await expect(async () => { await ticker.scrollIntoViewIfNeeded(); }).toPass({ timeout: 8000 }); await page.mouse.move(0, 0);
+  const coverage = await page.locator('.ticker-viewport').evaluate(el => ({ view: el.clientWidth, group: el.querySelector('.ticker-group').getBoundingClientRect().width, copies: el.querySelectorAll('.ticker-group').length }));
+  expect((coverage.copies - 1) * coverage.group).toBeGreaterThanOrEqual(coverage.view);
+  const samples = await page.evaluate(async () => {
+    const out = []; for (let i = 0; i < 100; i++) { out.push(new DOMMatrix(getComputedStyle(document.querySelector('.ticker-track')).transform).m41); await new Promise(r => setTimeout(r, 80)); } return out;
+  });
+  expect(samples.some((n, i) => i && n - samples[i - 1] > 200)).toBe(true);
+  for (let i = 1; i < samples.length; i++) {
+    let delta = samples[i] - samples[i - 1]; if (delta > 0) delta -= coverage.group;
+    expect(Math.abs(delta)).toBeLessThan(15);
+  }
+  results.push('10 services preserved', 'linear movement', 'smooth hover pause/resume', 'scale hover', 'offscreen pause', 'manual pause', 'keyboard access', 'mobile reduced motion', 'adaptive duplicates', 'seamless wrap');
+  expect(errors).toEqual([]);
+  await writeFile(`${evidence}/ticker-checks.json`, JSON.stringify({ results, errors, coverage, samples }, null, 2));
+  console.log('Ticker checks passed: ' + results.join(', '));
+} finally { await browser.close(); }
