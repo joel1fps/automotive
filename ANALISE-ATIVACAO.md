@@ -32,6 +32,8 @@ O roteiro detalhado está em [VERCEL.md](VERCEL.md). `.env.local` fica fora do G
 1. Remover todas as restrições de veículo de um serviço agora salva o array vazio, em vez de omitir a atualização e manter a restrição anterior.
 2. Mudar dias, abertura, fechamento ou duração da grade agora é bloqueado enquanto existem reservas futuras ativas. Reservas e reagendamentos compartilham a proteção transacional contra alterações concorrentes da grade. A capacidade continua editável.
 3. A política e os guias foram ajustados para Vercel; arquivos locais da Vercel e logs ficam fora do Git.
+4. A navegação pública mostra Entrar e Criar conta para visitantes; usuários autenticados recebem Minha conta e o menu de perfil/saída do Clerk.
+5. O ambiente local usa `localhost`, corrigindo um ciclo de requisições causado pela normalização de `127.0.0.1` no Next.js com o proxy Clerk. O matcher inclui `/__clerk/:path*`.
 
 ## Validação local
 
@@ -41,8 +43,9 @@ O roteiro detalhado está em [VERCEL.md](VERCEL.md). `.env.local` fica fora do G
 - Auditoria npm de produção: nenhuma vulnerabilidade conhecida reportada.
 - Conferência no Chrome: 24 combinações de rota/tamanho aprovadas (320, 390, 768 e 1440 px), além de preços, mídias, galeria, mapa, navegação e proteção administrativa sem Clerk. Relatório e capturas estão na pasta externa `evidencias/ativacao-vercel/` do pacote local.
 - Testes de banco utilizaram MongoDB temporário local, sem gravar no Atlas da operação.
+- Clerk conectado à aplicação solicitada pelo usuário. Conferência real local: 21 verificações aprovadas, incluindo SDK, Google, login/cadastro, consentimento, recuperação e proteção administrativa em seis larguras. Nenhuma conta foi criada e nenhum e-mail foi enviado por esse diagnóstico. Evidências em `evidencias/clerk-setup/` do pacote local.
 
-Login real, sincronização de webhook, conexão Atlas da Vercel e entrega de e-mails ainda precisam ser verificados depois de configurar as contas. Um build aprovado não confirma essas integrações externas.
+Sessão autenticada com usuário real, sincronização de webhook, conexão Atlas da Vercel e entrega de e-mails ainda precisam ser verificados depois de configurar as contas. Um build aprovado não confirma essas integrações externas.
 
 ## Pontos operacionais para revisar
 

@@ -100,7 +100,11 @@ npm test
 npm run build
 ```
 
-Não execute `Copy-Item` sobre um `.env.local` já preenchido. `npm run seed` lê esse arquivo e grava no banco indicado por `MONGODB_URI`; confira a base antes de executá-lo. O seed cria catálogo, configurações e índices sem duplicar serviços nem sobrescrever preços/configurações existentes. Execute-o como preparação do ambiente, não como parte automática do build Vercel.
+Não execute `Copy-Item` sobre um `.env.local` já preenchido. `npm run seed` lê esse arquivo e, se existir, `.env.development.local`, que tem prioridade sobre ele. Variáveis já definidas no processo têm prioridade sobre ambos. O comando grava no banco indicado por `MONGODB_URI`; confira a base antes de executá-lo. O seed cria catálogo, configurações e índices sem duplicar serviços nem sobrescrever preços/configurações existentes. Execute-o como preparação do ambiente, não como parte automática do build Vercel.
+
+Para conferir a conexão e as transações da base de testes, execute `npm run test:atlas`. Esse diagnóstico exige a base `automotive_homologacao`, verifica commit e rollback e remove somente os documentos criados pela própria execução. Não execute esse diagnóstico na base da operação.
+
+Inicie o ambiente local com `npm run dev` e abra `http://localhost:3000`. O hostname `localhost` evita um ciclo de redirecionamento interno entre Next.js e Clerk observado quando o servidor usava `127.0.0.1`. Com o Clerk configurado e o servidor iniciado, `npm run test:clerk` verifica os formulários reais e a proteção administrativa sem cadastrar usuários ou enviar e-mails.
 
 Após entrar como administrador, revise `/admin/configuracoes` e `/admin/servicos`. Os padrões são segunda a sábado, 8h às 17h, slots de 60 minutos e capacidade de um veículo. Confirme duração/capacidade reais e os preços por tipo de veículo. A alteração da grade, dos dias, dos horários de abertura/fechamento ou da duração é bloqueada enquanto existirem reservas futuras ativas; a capacidade continua editável. Planeje essas mudanças antes de abrir a agenda.
 

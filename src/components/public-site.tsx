@@ -1,5 +1,7 @@
 "use client";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+import authStyles from "./public-auth-controls.module.css";
 import { Ticker } from "./ticker";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
@@ -65,6 +67,29 @@ const nav = [
   { href: "/galeria", label: "Antes e depois" },
   { href: "/contato", label: "Contato" },
 ];
+const ClerkPublicAuthControls = dynamic(
+  () => import("./public-auth-controls").then((m) => m.PublicAuthControls),
+  { loading: () => <StaticAuthControls /> },
+);
+function StaticAuthControls({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <div className={authStyles.controls}>
+      <Link prefetch={false} href="/entrar" className="account-link" onClick={onNavigate}>
+        Entrar
+      </Link>
+      <Link prefetch={false} href="/cadastro" className={authStyles.signup} onClick={onNavigate}>
+        Criar conta
+      </Link>
+    </div>
+  );
+}
+function PublicAccountControls({ onNavigate }: { onNavigate?: () => void }) {
+  return process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ? (
+    <ClerkPublicAuthControls onNavigate={onNavigate} />
+  ) : (
+    <StaticAuthControls onNavigate={onNavigate} />
+  );
+}
 export function Brand({ footer = false }: { footer?: boolean }) {
   return (
     <Link prefetch={false}
@@ -109,7 +134,7 @@ export function PublicHeader() {
     <>
       <m.div className="scroll-progress" style={{ scaleX: scrollYProgress }} />
       <header className="site-header">
-        <div className="container header-inner">
+        <div className={`container header-inner ${authStyles.header}`}>
           <Brand />
           <nav className="desktop-nav" aria-label="Menu principal">
             {nav.map((n) => (
@@ -117,9 +142,7 @@ export function PublicHeader() {
                 {n.label}
               </Link>
             ))}
-            <Link prefetch={false} href="/cliente" className="account-link">
-              Minha conta
-            </Link>
+            <PublicAccountControls />
           </nav>
           <Link prefetch={false} className="button primary header-cta" href="/cliente/agendar">
             Agendar agora
@@ -143,11 +166,7 @@ export function PublicHeader() {
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
             >
-              {[
-                ...nav,
-                { href: "/cliente", label: "Minha conta" },
-                { href: "/cliente/agendar", label: "Agendar agora" },
-              ].map((n, i) => (
+              {nav.map((n, i) => (
                 <m.div
                   key={n.href}
                   initial={{ opacity: 0, x: -10 }}
@@ -159,6 +178,10 @@ export function PublicHeader() {
                   </Link>
                 </m.div>
               ))}
+              <PublicAccountControls onNavigate={() => setOpen(false)} />
+              <Link prefetch={false} href="/cliente/agendar" onClick={() => setOpen(false)}>
+                Agendar agora
+              </Link>
             </m.nav>
           )}
         </AnimatePresence>

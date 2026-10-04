@@ -1,0 +1,79 @@
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.controls .signup {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: #fff;
+  background: #ffffff06;
+}
+
+.controls .signup:hover {
+  border-color: #64d5ed;
+  background: #037c9b20;
+}
+
+.profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profileLabel {
+  display: none;
+}
+
+@media (min-width: 851px) and (max-width: 1100px) {
+  .header:global(.header-inner) {
+    gap: 16px;
+  }
+
+  .header :global(.desktop-nav) {
+    gap: 14px;
+  }
+
+  .header :global(.desktop-nav) .controls :global(.account-link) {
+    display: inline-flex;
+  }
+
+  .controls {
+    gap: 12px;
+  }
+
+  .controls .signup {
+    padding-inline: 12px;
+  }
+}
+
+@media (max-width: 850px) {
+  .controls {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .controls .signup {
+    border: 0;
+    border-bottom: 1px solid #23344155;
+    border-radius: 0;
+    padding: 15px 24px;
+    background: transparent;
+  }
+
+  .profile {
+    padding: 10px 24px;
+    border-bottom: 1px solid #23344155;
+  }
+
+  .profileLabel {
+    display: inline;
+    color: #c9d5df;
+    font-size: 0.875rem;
+  }
+}
