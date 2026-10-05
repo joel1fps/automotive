@@ -4,7 +4,7 @@ const SignIn=dynamic(()=>import("@clerk/nextjs").then(m=>m.SignIn));
 const SignUp=dynamic(()=>import("@clerk/nextjs").then(m=>m.SignUp));
 import Link from "next/link";
 import { useState } from "react";
-import { Brand } from "./public-site";
+import { Brand } from "./brand";
 import { whatsappUrl } from "@/lib/site-config";
 export function AuthScreen({ signup = false }: { signup?: boolean }) {
   const [consent, setConsent] = useState(false);

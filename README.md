@@ -19,7 +19,7 @@ npm run dev
 
 Abra `http://localhost:3000`. O institucional funciona sem contas externas. O catálogo inicial é apresentado publicamente, mas os painéis e as APIs privadas permanecem fechados até configurar a autenticação e o banco. Não existe login de demonstração nem bypass de administrador.
 
-No Windows, `INICIAR-SITE.cmd` instala as dependências e prepara/inicia o build de produção. Mantenha o terminal aberto e acesse `http://127.0.0.1:3000`.
+No Windows, `INICIAR-SITE.cmd` instala as dependências e prepara/inicia o build local de produção. Para testar o login Clerk, prefira `npm run dev` em `http://localhost:3000`, endereço utilizado na configuração local.
 
 ## Configurar o sistema real
 
@@ -36,15 +36,19 @@ npm run seed
 
 O seed é idempotente e não sobrescreve preços editados pelo administrador.
 
-7. Em `/admin/configuracoes`, revise duração e capacidade. O expediente registrado na atualização é segunda a sábado, das 8h às 17h; os padrões operacionais são slots de 60 minutos e capacidade de um veículo. A equipe precisa confirmar se esses dois padrões atendem à operação. O seed preserva configurações existentes.
+7. Novas solicitações usam data e horário livres, sem restrição por expediente ou capacidade de slots. O administrador decide a aprovação e informa a previsão de entrega; agendamentos manuais futuros também exigem essa previsão. As configurações de grade, duração e capacidade em `/admin/configuracoes` permanecem para compatibilidade com reservas antigas. O seed preserva configurações existentes.
 8. Confira endereço, WhatsApp e Instagram, já preenchidos em `.env.example` e usados como padrão do institucional. Defina o canal de privacidade e o domínio real. Use WhatsApp com código de país. Essas variáveis públicas não devem conter segredos.
 9. Para os avisos de serviço por e-mail, configure `RESEND_API_KEY` e `EMAIL_FROM`, com remetente de um domínio verificado no Resend. O envio é acionado manualmente pelo administrador. O aviso por WhatsApp abre a conversa com texto pronto para a equipe enviar. Veja [domínios Resend](https://resend.com/docs/dashboard/domains/introduction).
 
 As lavagens, motos, ozônio, película e demais extras ativos podem ser solicitados online, respeitando os tipos de veículo configurados. Serviços sem preço definido ou anunciados “a partir de” ficam sob orçamento, com valor confirmado pela equipe; o WhatsApp também está disponível para consultar o serviço. O administrador pode registrar serviços à parte no agendamento manual em **Outros**, informando descrição e valor, sem cupom ou fidelidade. A opção Outros é exclusiva do administrador. O seed insere serviços sem duplicar slugs nem alterar registros existentes; em banco antigo, renomeie a película para Window Blue no painel.
 
+O acompanhamento segue seis etapas: solicitado, aprovado, veículo recebido, serviço em andamento, serviço pronto e veículo entregue. Marcar como pronto registra a conclusão do trabalho e pode ocorrer antes da previsão. O recebimento é registrado separadamente, com valor e forma de pagamento; a entrega registra a saída. A fila atual mostra os veículos presentes por ordem de chegada, e o histórico permite consultar dia, semana, mês ou intervalo por data agendada, entrada, conclusão ou entrega/devolução. Cada atendimento pode ter um link seguro de acompanhamento sem login, administrado e revogável pelo painel.
+
 ## Publicar na Vercel
 
 Consulte [VERCEL.md](VERCEL.md): raiz do GitHub, Node 24, `npm ci`, `npm run build`, ambientes, rede Atlas, variáveis, domínio Clerk, webhook, Resend, seed e verificação após publicação. Use o preset Next.js e sua saída padrão para preservar as APIs e o processamento no servidor. O `apphosting.yaml` é uma alternativa histórica para Firebase App Hosting, descrita em [INTEGRACOES.md](INTEGRACOES.md).
+
+A primeira publicação será uma homologação independente em `.vercel.app`, usando Clerk de desenvolvimento e a base de testes. Para abrir a operação real, configure domínio próprio, instância Clerk de produção e uma base limpa com credenciais próprias. GitHub recebe somente código e arquivos públicos; usuários, agendamentos e receitas continuam no Clerk e no Atlas. Não transfira registros de teste para a operação. As instâncias Clerk têm usuários e IDs separados; trocar as chaves não migra contas automaticamente.
 
 ## Conteúdo real da galeria e avaliações
 
@@ -86,16 +90,16 @@ O Next.js 16 chama o middleware de `proxy.ts`. A proteção principal também é
 
 ## Garantias implementadas
 
-- Reservas concorrentes não ultrapassam a capacidade do horário.
+- Novas solicitações aceitam horário livre e dependem da aprovação administrativa; reservas antigas mantêm controle transacional das vagas.
 - Agendamento cliente inicia pendente; agendamento manual inicia confirmado.
 - Recusa/cancelamento liberam a vaga e o cupom reservado.
-- Conclusão, receita, fidelidade e consumo do cupom pertencem à mesma transação MongoDB. Uma conclusão repetida é rejeitada.
+- Serviço pronto, recebimento e entrega têm datas separadas. Receita, fidelidade e consumo do cupom são registrados na transação de fechamento financeiro, que não pode gerar uma segunda receita para o mesmo atendimento.
 - Cupom é reservado exclusivamente, deve pertencer ao cliente, ter placa/tamanho compatíveis e continuar válido no horário solicitado.
 - Receitas de cortesia são zero, mesmo que a requisição tente enviar outro valor.
 - Ajustes de fidelidade exigem motivo e são auditados. Ajustes não geram cupons; emissão acontece ao concluir lavagens.
 - Catálogo/preço e elegibilidade são fotografados no agendamento para manter o histórico após edições.
 - Datas de agendamento e financeiro usam `America/Fortaleza`.
-- Exportação respeita período, categoria e pagamento, com abas Resumo, Entradas e Por serviço.
+- **Excel de faturamento** contém Resumo, Entradas e Por serviço. **Excel completo** acrescenta Resumo de veículos e Veículos e serviços, abrindo diretamente na lista de clientes e carros. O período e a categoria valem para ambos; a forma de pagamento filtra as abas financeiras. O critério de data dos veículos é separado da data financeira e inclui atendimentos sem pagamento. Veja [EXPORTACAO_EXCEL.md](EXPORTACAO_EXCEL.md).
 - Valores financeiros são somados em centavos.
 - Role é calculada a partir dos dados Clerk consultados no servidor; nunca de `unsafeMetadata` ou do corpo do pedido.
 - Rate limiting persistente em MongoDB, com expiração automática por índice TTL.

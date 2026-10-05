@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { Brand } from "./brand";
 import dynamic from "next/dynamic";
 import authStyles from "./public-auth-controls.module.css";
 import { Ticker } from "./ticker";
@@ -88,24 +89,6 @@ function PublicAccountControls({ onNavigate }: { onNavigate?: () => void }) {
     <ClerkPublicAuthControls onNavigate={onNavigate} />
   ) : (
     <StaticAuthControls onNavigate={onNavigate} />
-  );
-}
-export function Brand({ footer = false }: { footer?: boolean }) {
-  return (
-    <Link prefetch={false}
-      href="/"
-      className={`brand ${footer ? "brand-footer" : ""}`}
-      aria-label="Automotive — início"
-    >
-      <Image
-        src="/brand/logo-white.webp"
-        alt="Automotive — Lava a Jato e Serviços"
-        width={700}
-        height={313}
-        sizes="(max-width: 620px) 160px, 207px"
-        loading={footer ? "lazy" : "eager"}
-      />
-    </Link>
   );
 }
 function Reveal({
@@ -474,7 +457,7 @@ function Loyalty() {
 const faqs = [
   {
     q: "Como funciona o agendamento?",
-    a: "Você escolhe o serviço, informa seu veículo e solicita um horário disponível. A solicitação fica pendente até a equipe confirmar. Acompanhe o status na sua conta.",
+    a: "Você escolhe o serviço, informa seu veículo e solicita a data e o horário desejados. A equipe aprova o atendimento e informa a previsão de entrega. Acompanhe as atualizações na sua conta.",
   },
   {
     q: "Como ganho a lavagem gratuita?",
@@ -593,7 +576,7 @@ function Contact() {
               Instagram
             </a>
           )}
-          <div className="contact-hours"><Clock3 /><div><h3>Horário de funcionamento</h3><p>{businessContact.hours}</p><small>Agendamentos sujeitos à confirmação da equipe.</small></div></div>
+          <div className="contact-hours"><Clock3 /><div><h3>Atendimento por agendamento</h3><p>{businessContact.hours}</p><small>A previsão de entrega é definida na aprovação do atendimento.</small></div></div>
         </div>
       </div>
       <div className="container contact-location">

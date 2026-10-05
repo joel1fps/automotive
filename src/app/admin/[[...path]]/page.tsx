@@ -17,6 +17,7 @@ export default async function Page({
       "servicos",
       "financeiro",
       "cupons",
+      "logs",
       "configuracoes",
     ].includes(section)
   )

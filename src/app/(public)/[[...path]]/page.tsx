@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import type { Metadata } from "next";
 import { PublicSite } from "@/components/public-site";
 import { businessContact } from "@/lib/site-config";
@@ -16,6 +17,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { path } = await params;
   const key = path?.join("/") || "";
+  if (!Object.hasOwn(pages, key)) notFound();
   return {
     title: key
       ? (
@@ -36,13 +38,16 @@ export default async function Page({
   params: Promise<{ path?: string[] }>;
 }) {
   const { path } = await params;
-  const page = pages[path?.join("/") || ""];
-  if (!page) notFound();
+  const key = path?.join("/") || "";
+  if (!Object.hasOwn(pages, key)) notFound();
+  const page = pages[key];
   const address = businessContact.address;
+  const nonce = (await headers()).get("x-nonce") || undefined;
   return (
     <>
       {address && (
         <script
+          nonce={nonce}
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
@@ -51,7 +56,6 @@ export default async function Page({
               name: "Automotive — Lava a Jato e Serviços",
               url: process.env.NEXT_PUBLIC_SITE_URL,
               telephone: businessContact.whatsapp,
-              openingHours: "Mo-Sa 08:00-17:00",
               sameAs: [businessContact.instagram],
               address: {
                 "@type": "PostalAddress",

@@ -56,6 +56,10 @@ export function validAppointmentTime(
     !!appointmentSlot(date, settings)
   );
 }
+// New requests accept any future minute; business hours apply only to legacy slots.
+export function validRequestedTime(date: Date, now = new Date()) {
+  return Number.isFinite(+date) && date > now;
+}
 export function loyaltyStep(current: number, eligible: boolean) {
   assert(
     Number.isInteger(current) && current >= 0 && current < 10,

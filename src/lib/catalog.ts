@@ -95,15 +95,17 @@ export const money = (n: number) =>
   );
 export const statusLabels: Record<string, string> = {
   pending: "Pendente",
-  arrived: "No lava-jato",
-  in_progress: "Em andamento",
-  ready: "Pronto para retirada",
+  arrived: "Aguardando atendimento",
+  in_progress: "Em atendimento",
+  ready: "Pronto · pagamento pendente",
   delivered: "Entregue",
   confirmed: "Confirmado",
-  completed: "Concluído",
+  completed: "Pago · retirada pendente",
   rejected: "Recusado",
   cancelled: "Cancelado",
+  returned: "Devolvido sem fechamento",
   available: "Disponível",
   used: "Usado",
   expired: "Vencido",
+  revoked: "Revogado por estorno",
 };

@@ -10,8 +10,18 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "test:ui": "node scripts/verify-ui.mjs",
+    "test:finance-export": "node scripts/verify-finance-export.mjs",
+    "test:calendar-deletion": "node scripts/verify-calendar-deletion.mjs",
+    "test:flexible-queue": "node scripts/verify-flexible-queue.mjs",
+    "test:approved-ui": "node scripts/verify-approved-ui.mjs",
+    "test:operational-history": "node scripts/verify-operational-history.mjs",
+    "test:compact-queue": "node scripts/verify-compact-queue.mjs",
     "test:clerk": "node scripts/verify-clerk.mjs",
+    "test:security": "node scripts/verify-security.mjs",
+    "test:secrets": "node scripts/verify-build-secrets.mjs",
     "test:atlas": "node scripts/verify-atlas.mjs",
+    "test:operational": "tsx scripts/verify-operational.ts",
+    "migrate:operational": "tsx scripts/migrate-operational.ts",
     "seed": "tsx --env-file=.env.local --env-file-if-exists=.env.development.local scripts/seed.ts"
   },
   "dependencies": {

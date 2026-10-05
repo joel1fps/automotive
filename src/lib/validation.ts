@@ -1,8 +1,22 @@
 import { z } from "zod";
+import { phoneSchema } from "./profile";
+// An optional contact may be blank, but invalid numbers must keep the phone
+// validator's useful message instead of a union's generic "Invalid input".
+const phoneOrBlankSchema = z.string().trim().transform((value, context) => {
+  if (value === "") return "";
+  const parsed = phoneSchema.safeParse(value);
+  if (!parsed.success) {
+    for (const issue of parsed.error.issues) {
+      context.addIssue({ code: "custom", message: issue.message, path: issue.path });
+    }
+    return z.NEVER;
+  }
+  return parsed.data;
+});
 export const objectId = z
   .string()
   .regex(/^[a-f\d]{24}$/i, "Identificador inválido");
-export const vehicleSchema = z.object({
+export const vehicleSchema = z.strictObject({
   model: z.string().trim().min(2).max(80),
   plate: z
     .string()
@@ -26,7 +40,8 @@ const amount = z
     (v) => Math.abs(Math.round(v * 100) - v * 100) < 0.000001,
     "Use no máximo duas casas decimais",
   );
-export const bookingSchema = z.object({
+export const bookingSchema = z.strictObject({
+  requestId: z.uuid().optional(),
   serviceId: objectId,
   vehicle: vehicleSchema,
   scheduledAt: z.iso.datetime({ offset: true }),
@@ -35,7 +50,7 @@ export const bookingSchema = z.object({
   consent: z.literal(true),
 });
 // Serviço à parte ("Outros"): descrição livre e valor definido por quem cadastra.
-export const customServiceSchema = z.object({
+export const customServiceSchema = z.strictObject({
   description: z.string().trim().min(2, "Descreva o serviço").max(200),
   price: amount,
 });
@@ -46,8 +61,14 @@ export const manualBookingSchema = bookingSchema
     custom: customServiceSchema.optional(),
     userId: objectId.optional(),
     guestName: z.string().trim().min(2).max(120).optional(),
+    guestPhone: phoneOrBlankSchema.optional(),
+    walkIn: z.boolean().optional(),
+    scheduledAt: z.iso.datetime({ offset: true }).optional(),
+    estimatedCompletionAt: z.iso.datetime({ offset: true }).optional(),
   })
   .refine((v) => !!v.userId || !!v.guestName, "Informe cliente ou nome avulso")
+  .refine((v) => !!v.walkIn || !!v.scheduledAt, "Informe o horário ou registre uma chegada sem agendamento")
+  .refine((v) => !!v.walkIn || !!v.estimatedCompletionAt, "Informe a previsão de entrega para confirmar o agendamento manual.")
   .refine(
     (v) => !!v.serviceId !== !!v.custom,
     "Escolha um serviço da lista ou informe um serviço à parte (Outros)",
@@ -57,18 +78,24 @@ export const manualBookingSchema = bookingSchema
     "Cupom não vale para serviço à parte",
   );
 export const actionSchema = z.discriminatedUnion("action", [
-  z.object({
-    action: z.enum(["confirm", "reject", "cancel", "arrive", "start", "ready", "deliver"]),
+  z.strictObject({ action: z.literal("return"), reason: z.string().trim().min(5, "Informe o motivo da devolução.").max(500) }),
+  z.strictObject({
+    action: z.literal("confirm"),
+    estimatedCompletionAt: z.iso.datetime({ offset: true, error: "Informe a previsão de entrega para aprovar o agendamento." }),
+  }),
+  z.strictObject({
+    action: z.enum(["reject", "cancel", "arrive", "start", "ready", "deliver"]),
     reason: z.string().trim().max(500).optional(),
   }),
-  z.object({
+  z.strictObject({
     action: z.literal("complete"),
     finalPrice: amount,
     paymentMethod: z.enum(["pix", "cash", "card"]),
   }),
-  z.object({
+  z.strictObject({
     action: z.literal("reschedule"),
     scheduledAt: z.iso.datetime({ offset: true }),
+    estimatedCompletionAt: z.iso.datetime({ offset: true }).optional(),
   }),
 ]);
 export const serviceSchema = z
@@ -90,7 +117,8 @@ export const serviceSchema = z
     (v) => v.category !== "wash" || v.prices !== null,
     "Lavagem precisa ter preços",
   );
-export const transactionSchema = z.object({
+export const transactionSchema = z.strictObject({
+  requestId: z.uuid().optional(),
   description: z.string().trim().min(2).max(200),
   category: z.string().trim().min(2).max(80),
   userId: objectId.optional(),
@@ -115,12 +143,12 @@ export const settingsSchema = z
     (v) => v.openTime < v.closeTime,
     "O fechamento deve ser após a abertura",
   );
-export const pointsSchema = z.object({
+export const pointsSchema = z.strictObject({
   delta: z.number().int().min(-9).max(9),
   reason: z.string().trim().min(5).max(500),
 });
-export const clientSchema = z.object({
-  phone: z.string().trim().max(25),
+export const clientSchema = z.strictObject({
+  phone: phoneOrBlankSchema,
   vehicles: z.array(vehicleSchema).max(20),
 });
 export const slotSchema = z.object({

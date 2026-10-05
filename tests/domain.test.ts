@@ -9,13 +9,48 @@ import {
   periodBounds,
   sumMoney,
   validAppointmentTime,
+  validRequestedTime,
 } from "../src/lib/domain";
 import { defaultSettings, initialServices } from "../src/lib/catalog";
 import {
   bookingSchema,
+  clientSchema,
   dateSchema,
+  manualBookingSchema,
   settingsSchema,
+  actionSchema,
 } from "../src/lib/validation";
+test("Chegada avulsa informa o erro de telefone e preserva contato opcional", () => {
+  const walkIn = {
+    walkIn: true,
+    guestName: "Joel222",
+    serviceId: "a".repeat(24),
+    vehicle: { model: "Onix", plate: "KTZ-7H11", type: "pickup" },
+    notes: "teste",
+  };
+  const invalid = manualBookingSchema.safeParse({ ...walkIn, guestPhone: "8999248167" });
+  assert.equal(invalid.success, false);
+  if (!invalid.success) {
+    assert.deepEqual(invalid.error.issues[0].path, ["guestPhone"]);
+    assert.match(invalid.error.issues[0].message, /Informe um telefone brasileiro válido com DDD/);
+    assert.notEqual(invalid.error.issues[0].message, "Invalid input");
+  }
+  assert.equal(manualBookingSchema.parse(walkIn).guestPhone, undefined);
+  assert.equal(manualBookingSchema.parse({ ...walkIn, guestPhone: "   " }).guestPhone, "");
+  assert.equal(manualBookingSchema.parse({ ...walkIn, guestPhone: "(89) 99924-8167" }).guestPhone, "5589999248167");
+  assert.equal(manualBookingSchema.parse({ ...walkIn, guestPhone: "(89) 3248-1670" }).guestPhone, "558932481670");
+});
+
+test("Edição do cliente preserva mensagem do telefone e permite apagar contato", () => {
+  const invalid = clientSchema.safeParse({ phone: "8999248167", vehicles: [] });
+  assert.equal(invalid.success, false);
+  if (!invalid.success) {
+    assert.deepEqual(invalid.error.issues[0].path, ["phone"]);
+    assert.match(invalid.error.issues[0].message, /Informe um telefone brasileiro válido com DDD/);
+  }
+  assert.equal(clientSchema.parse({ phone: "", vehicles: [] }).phone, "");
+  assert.equal(clientSchema.parse({ phone: "+55 (89) 99924-8167", vehicles: [] }).phone, "5589999248167");
+});
 test("Os nove preços conferem com a tabela fornecida", () => {
   assert.deepEqual(
     initialServices.slice(0, 3).map((s) => s.prices),
@@ -73,7 +108,7 @@ test("Cupom de 30 dias exige mesma placa e tamanho", () => {
     false,
   );
 });
-test("Horários respeitam expediente e America/Fortaleza", () => {
+test("Horários legados respeitam expediente e America/Fortaleza", () => {
   const slots = localSlots("2026-10-01", defaultSettings);
   assert.equal(slots.length, 9);
   assert.equal(slots[0].toISOString(), "2026-10-01T11:00:00.000Z");
@@ -88,6 +123,38 @@ test("Horários respeitam expediente e America/Fortaleza", () => {
     ),
     true,
   );
+});
+test("Solicitações novas aceitam qualquer minuto futuro, domingo e madrugada", () => {
+  const now = new Date("2026-10-01T00:00:00Z");
+  assert.equal(validRequestedTime(new Date("2026-10-04T02:17:00-03:00"), now), true);
+  assert.equal(validRequestedTime(new Date("2026-10-01T19:43:00-03:00"), now), true);
+  assert.equal(validRequestedTime(now, now), false);
+  assert.equal(validRequestedTime(new Date(+now - 1), now), false);
+  assert.equal(validRequestedTime(new Date("invalid"), now), false);
+});
+test("Aprovar exige previsão ISO e não aceita identidade administrativa no corpo", () => {
+  assert.equal(actionSchema.safeParse({ action: "confirm" }).success, false);
+  assert.equal(actionSchema.safeParse({ action: "confirm", estimatedCompletionAt: "2026-10-04T13:17:00-03:00" }).success, true);
+  assert.equal(actionSchema.safeParse({ action: "confirm", estimatedCompletionAt: "amanhã" }).success, false);
+  assert.equal(actionSchema.safeParse({ action: "confirm", estimatedCompletionAt: "2026-10-04T13:17:00-03:00", adminClerkId: "fake" }).success, false);
+  assert.equal(actionSchema.safeParse({ action: "reschedule", scheduledAt: "2026-10-04T13:17:00-03:00", estimatedCompletionAt: "2026-10-04T14:17:00-03:00" }).success, true);
+});
+test("Agendamento manual exige previsão de entrega; chegada avulsa mantém essa previsão opcional", () => {
+  const input = { serviceId: "a".repeat(24), guestName: "Cliente manual", vehicle: { model: "Onix", plate: "MAN1A23", type: "small" },
+    scheduledAt: "2030-01-07T12:00:00Z" };
+  const invalid = manualBookingSchema.safeParse(input);
+  assert.equal(invalid.success, false);
+  if (!invalid.success) assert.ok(invalid.error.issues.some(issue => /previsão de entrega/.test(issue.message)));
+  assert.equal(manualBookingSchema.safeParse({ ...input, estimatedCompletionAt: "2030-01-07T15:00:00Z" }).success, true);
+  assert.equal(manualBookingSchema.safeParse({ ...input, scheduledAt: undefined, walkIn: true }).success, true);
+  assert.equal(manualBookingSchema.safeParse({ ...input, estimatedCompletionAt: "2030-01-07T15:00:00Z", requestId: "id-escolhido-sem-formato" }).success, false);
+});
+test("Devolução exige motivo significativo e rejeita pagamento ou identidade enviados no corpo", () => {
+  for (const reason of [undefined, "", "     ", "abcd", "x".repeat(501), { $ne: null }])
+    assert.equal(actionSchema.safeParse({ action: "return", reason }).success, false);
+  assert.deepEqual(actionSchema.parse({ action: "return", reason: "  Cliente retirou antes da execução  " }), { action: "return", reason: "Cliente retirou antes da execução" });
+  for (const extra of [{ adminClerkId: "forjado" }, { finalPrice: 50 }, { returnedAt: "2030-01-07T15:00:00Z" }, { status: "delivered" }])
+    assert.equal(actionSchema.safeParse({ action: "return", reason: "Retirada pelo cliente", ...extra }).success, false);
 });
 test("Períodos financeiros têm limites locais, incluindo virada de mês", () => {
   assert.equal(
@@ -132,6 +199,7 @@ test("Serviço à parte (Outros) exige descrição e valor, sem cupom e sem serv
   const base = {
     vehicle: { model: "Onix", plate: "ABC1D23", type: "small" as const },
     scheduledAt: "2030-01-07T12:00:00.000Z",
+    estimatedCompletionAt: "2030-01-07T15:00:00.000Z",
     guestName: "Cliente Avulso",
   };
   const ok = manualBookingSchema.safeParse({

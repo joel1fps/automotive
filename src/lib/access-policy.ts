@@ -4,7 +4,7 @@ export function serverRole(
   email: string | undefined,
   verified: boolean,
   allowlist: string[],
-) {
+): "admin" | "client" {
   return metadata.role === "admin" ||
     (verified && !!email && allowlist.includes(email.toLowerCase()))
     ? "admin"

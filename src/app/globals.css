@@ -919,6 +919,10 @@ footer {
 .sidebar-bottom > div {
   margin: 14px 0;
 }
+.sidebar-bottom > a {
+  display: block;
+  padding-block: 4px;
+}
 .dash-main {
   padding: 36px 42px;
   min-width: 0;
@@ -1326,6 +1330,18 @@ td .button {
 .dialog-head .button {
   padding: 8px;
   min-height: 40px;
+  flex-shrink: 0;
+}
+.dialog-head h2 {
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-body), Arial, sans-serif;
+  font-size: 1.3rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-transform: none;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
 }
 .dialog-content form {
   margin-top: 20px;
@@ -2157,3 +2173,47 @@ h2,
 .curtain-door { width: 50%; height: 100%; flex: 0 0 50%; background: #071724; will-change: transform; }
 .curtain-door-left { transform: translateX(-100%); }
 .curtain-door-right { transform: translateX(100%); }
+
+/* Administrative operation: arrival queue, independent of the planning date. */
+.dash-main .panel-header { flex-wrap: wrap; }
+.queue-panel .panel-header > div:first-child { flex: 1 1 260px; min-width: 0; }
+.finance-exports { margin-top: 20px; border-top: 1px solid var(--border); padding-top: 18px; }
+.finance-exports > .row-actions { min-width: 0; gap: 10px; }
+.finance-exports .button { white-space: normal; }
+.finance-exports > p { margin-top: 12px; }
+.finance-exports summary { cursor: pointer; font-size: .85rem; color: #add5ff; padding: 8px 0; }
+.finance-exports details > label { max-width: 440px; margin: 10px 0; }
+@media(max-width: 600px) { .finance-exports > .row-actions { flex-direction: column; align-items: stretch; } }
+.queue-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 14px; margin-bottom: 22px; }
+.queue-filters > label { flex: 1 1 220px; min-width: 0; }
+.queue-filters > .button { min-height: 44px; }
+.queue-requests > summary { cursor: pointer; font-size: 1rem; font-weight: 600; padding: 4px 0; }
+.queue-requests > summary span { margin-left: 8px; padding: 3px 9px; border-radius: 99px; background: #1d3e85; font-size: .82rem; }
+.queue-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 16px; align-items: start; }
+.queue-column { min-width: 0; border: 1px solid var(--border); border-radius: 12px; background: #0b1522; padding: 14px; }
+.queue-column > header { min-height: 110px; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 14px; }
+.queue-column h3 { font-family: var(--font-body), Arial, sans-serif; font-size: 1rem; line-height: 1.5; margin: 0 0 8px; }
+.queue-column h3 span { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; margin-left: 6px; border-radius: 99px; background: #1f4fc4; padding: 2px 8px; }
+.queue-column > header p, .queue-empty { color: var(--muted); font-size: .82rem; }
+.queue-card { min-width: 0; border: 1px solid #38516a; background: #102235; border-radius: 10px; padding: 14px; margin-bottom: 14px; overflow-wrap: anywhere; }
+.queue-card:last-child { margin-bottom: 0; }
+.queue-vehicle { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.queue-vehicle h4 { font-size: 1.15rem; letter-spacing: .06em; margin: 0; }
+.queue-vehicle span { font-size: .75rem; color: #63d2ec; }
+.queue-card > p { font-size: .85rem; margin: 4px 0 10px; }
+.queue-card .appointment-contact { padding: 10px 0; border-block: 1px solid var(--border); }
+.appointment-contact p { margin: 0; font-size: .85rem; }
+.appointment-contact a { font-size: .8rem; min-height: 44px; display: inline-flex; align-items: center; }
+.queue-card .queue-service { font-weight: 600; margin-top: 12px; }
+.queue-card dl { font-size: .78rem; margin: 10px 0 14px; }
+.queue-card dl > div { padding: 5px 0; }
+.queue-card dt { color: var(--muted); }
+.queue-card dd { margin: 0; }
+.queue-card .row-actions { display: flex; flex-direction: column; align-items: stretch; }
+.queue-card .button { white-space: normal; text-align: center; min-height: 44px; padding: 9px 10px; font-size: .8rem; }
+.queue-card .row-actions > p { font-size: .8rem; }
+.queue-ready { border-color: #b99b48; }
+.queue-completed { border-color: #4e9982; }
+.finance-reference { font-size: .75rem; }
+.finance-reference span { font-family: monospace; overflow-wrap: anywhere; }
+@media(max-width: 600px) { .queue-panel { padding: 16px; } .queue-column > header { min-height: 0; } .queue-panel .panel-header > .row-actions { width: 100%; } .queue-panel .panel-header > .row-actions > .button { flex: 1; white-space: normal; } }

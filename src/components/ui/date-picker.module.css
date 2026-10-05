@@ -1,0 +1,115 @@
+.root {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+.trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid #33516b;
+  border-radius: 8px;
+  background: #081521;
+  color: #fff;
+  font-size: 1rem;
+  text-align: left;
+}
+.trigger svg { flex: 0 0 auto; color: #c4d5e3; }
+.popup {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  z-index: 160;
+  box-sizing: border-box;
+  padding: 16px 14px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid #dce5ec;
+  border-radius: 12px;
+  background: #fff;
+  color: #3f4b5c;
+  box-shadow: 0 16px 48px #0005;
+  font-family: var(--font-body, Arial, sans-serif);
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.4;
+  color-scheme: light;
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.monthTitle {
+  margin: 0;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #475569;
+  text-align: center;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.monthArrow {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #e3eaf1;
+  border-radius: 4px;
+  background: #fff;
+  color: #278fe9;
+}
+.monthArrow:hover { background: #eef6ff; }
+.monthArrow:disabled { opacity: .3; cursor: default; }
+.grid { display: grid; gap: 4px; }
+.week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+.weekday {
+  padding-bottom: 4px;
+  font-size: 11px;
+  color: #738091;
+  text-align: center;
+}
+.cell { display: flex; align-items: center; justify-content: center; min-height: 30px; }
+.day {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #405067;
+  font-size: 12px;
+  line-height: 30px;
+  text-align: center;
+}
+.day:hover { background: #eaf4fe; }
+.day[aria-current="date"] { color: #1685e2; font-weight: 600; }
+.cell[aria-selected="true"] .day { background: #268ee9; color: white; font-weight: 600; }
+.day:disabled { color: #b8c1cc; cursor: default; background: transparent; opacity: 1; }
+.day:focus-visible, .monthArrow:focus-visible { outline: 2px solid #1973c5; outline-offset: 2px; }
+.validationInput, .srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  border: 0;
+  white-space: nowrap;
+}
+@media (pointer: coarse) {
+  .cell { min-height: 36px; }
+  .day { width: 34px; height: 34px; line-height: 34px; }
+  .monthArrow { height: 34px; }
+}

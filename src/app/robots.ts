@@ -4,7 +4,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: "/",
-      disallow: ["/admin", "/cliente", "/api", "/entrar", "/cadastro", "/recuperar-senha"],
+      disallow: ["/admin", "/cliente", "/api", "/acompanhar", "/entrar", "/cadastro", "/recuperar-senha"],
     },
     sitemap: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/sitemap.xml`,
   };

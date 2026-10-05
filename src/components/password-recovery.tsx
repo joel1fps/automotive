@@ -3,7 +3,7 @@
 import { useSignIn } from "@clerk/nextjs";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Brand } from "./public-site";
+import { Brand } from "./brand";
 
 export function PasswordRecovery() {
   return <main className="auth-page"><Brand /><section className="auth-box recovery-box">

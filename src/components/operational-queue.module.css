@@ -1,0 +1,313 @@
+.root {
+  width: 100%;
+  min-width: 0;
+}
+
+.root .board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.root .stagePicker {
+  display: none;
+}
+
+.root .column {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #0b1522;
+}
+
+.root .column[data-status="ready"] {
+  border-color: #b99b48;
+}
+
+.root .column[data-status="completed"] {
+  border-color: #4e9982;
+}
+
+.root .columnHeader {
+  min-height: 94px;
+  padding: 0 0 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.root .columnHeader h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-family: var(--font-body), Arial, sans-serif;
+  font-size: .9rem;
+  line-height: 1.4;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.root .columnHeader h3 span {
+  flex-shrink: 0;
+  min-width: 26px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: #1f4fc4;
+  color: white;
+  font-size: .8rem;
+  text-align: center;
+}
+
+.root .columnHeader p,
+.root .empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: .78rem;
+  line-height: 1.5;
+}
+
+.root .cards,
+.root .periodList {
+  display: grid;
+  gap: 9px;
+}
+
+.root .card {
+  min-width: 0;
+  margin: 0;
+  padding: 11px;
+  border: 1px solid #38516a;
+  border-radius: 9px;
+  background: #102235;
+  overflow-wrap: anywhere;
+}
+
+.root .card[data-expanded="true"] {
+  border-color: #56b8d0;
+}
+
+.root .summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.root .identity {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.root .plateLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.root .plateLine h4 {
+  margin: 0;
+  font-family: var(--font-body), Arial, sans-serif;
+  font-size: .96rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: .045em;
+  text-transform: none;
+}
+
+.root .position {
+  color: #83d6e9;
+  font-size: .7rem;
+}
+
+.root .clientName {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin: 3px 0 0;
+  color: #c6d5e2;
+  font-size: .8rem;
+  line-height: 1.4;
+}
+
+.root .overdue {
+  display: inline-block;
+  margin-top: 5px;
+  color: #f5d58a;
+  font-size: .7rem;
+  line-height: 1.4;
+}
+
+.root .card .toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 9px;
+  border: 1px solid #42637d;
+  border-radius: 6px;
+  background: #132c40;
+  color: #ddf4ff;
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.root .card .toggle:hover {
+  background: #1c3d54;
+  border-color: #64bdd5;
+}
+
+.root .card .toggle:focus-visible {
+  outline: 2px solid #6bd8ed;
+  outline-offset: 3px;
+}
+
+.root .details:not([hidden]) {
+  padding-top: 12px;
+  margin-top: 11px;
+  border-top: 1px solid #38516a;
+}
+
+.root .details[hidden] {
+  display: none;
+}
+
+.root .model,
+.root .service,
+.root .note {
+  margin: 0 0 8px;
+  font-size: .8rem;
+  line-height: 1.5;
+}
+
+.root .service {
+  font-weight: 600;
+}
+
+.root .note {
+  color: var(--muted);
+}
+
+.root .details :global(.appointment-contact) {
+  padding-block: 9px;
+  border-block: 1px solid var(--border);
+}
+
+.root .dates {
+  margin: 10px 0 14px;
+  font-size: .76rem;
+  line-height: 1.5;
+}
+
+.root .dates > div {
+  padding: 4px 0;
+}
+
+.root .dates dt {
+  color: var(--muted);
+}
+
+.root .dates dd {
+  margin: 0;
+}
+
+.root .details :global(.row-actions) {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.root .details :global(.row-actions) :global(.button) {
+  min-height: 44px;
+  padding: 9px 10px;
+  font-size: .78rem;
+  white-space: normal;
+  text-align: center;
+}
+
+.root .periodCard .identity {
+  flex: 1 1 260px;
+}
+
+.root .status {
+  min-width: 0;
+}
+
+.root .periodCard .dates {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 16px;
+}
+
+.root .periodCard .details :global(.row-actions) {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+@media (min-width: 901px) and (max-width: 1200px) {
+  .root .board {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .root .columnHeader {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .root .board {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .root .stagePicker {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin-bottom: 12px;
+    font-size: .85rem;
+  }
+
+  .root .column:not([data-mobile-active="true"]) {
+    display: none;
+  }
+
+  .root .columnHeader {
+    min-height: 0;
+  }
+
+  .root .identity {
+    flex: 1 1 150px;
+  }
+
+  .root .card .toggle {
+    min-height: 44px;
+    padding: 8px 10px;
+  }
+
+  .root .periodCard .identity {
+    flex-basis: 100%;
+  }
+
+  .root .periodCard .dates {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .root .periodCard .details :global(.row-actions) {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 380px) {
+  .root .periodCard .dates {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

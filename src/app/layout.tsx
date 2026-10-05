@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import localFont from "next/font/local";
 import { Providers } from "@/components/providers";
 import { Loader } from "@/components/fx";
@@ -30,8 +31,8 @@ const origin = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 export const metadata: Metadata = {
   metadataBase: new URL(origin),
   title: {
-    default: "Automotive — Lava a Jato e Serviços",
-    template: "%s | Automotive",
+    default: "Automotive",
+    template: "Automotive",
   },
   description:
     "Lavagem e estética automotiva. Conheça os serviços, consulte os preços e solicite seu agendamento na Automotive.",
@@ -45,11 +46,12 @@ export const metadata: Metadata = {
   },
   robots: { index: true, follow: true },
 };
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const nonce = (await headers()).get("x-nonce") || undefined;
   return (
     <html
       lang="pt-BR"
@@ -57,7 +59,7 @@ export default function RootLayout({
       className={`${headingFont.variable} ${bodyFont.variable}`}
     >
       <body>
-        <Providers>
+        <Providers nonce={nonce}>
           <Loader />
           {children}
         </Providers>

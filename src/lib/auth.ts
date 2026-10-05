@@ -1,8 +1,11 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { User, RateLimit, connectDB } from "./db";
+import { RateLimit, connectDB } from "./db";
 import { AppError } from "./domain";
 import { serverRole } from "./access-policy";
-export async function requireActor(admin = false) {
+import { assertAdminRole, clerkProfileName } from "./profile";
+import { syncClerkIdentity } from "./profile-store";
+export { readOwnProfile, updateOwnProfile } from "./profile-store";
+export async function requireActor(admin = false, options?: { apiMethod: string }) {
   if (
     !process.env.CLERK_SECRET_KEY ||
     !process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
@@ -10,8 +13,13 @@ export async function requireActor(admin = false) {
     throw new AppError(503, "O acesso está aguardando configuração.");
   const { userId } = await auth();
   if (!userId) throw new AppError(401, "Entre na sua conta para continuar.");
+  if (options) {
+    const read = ["GET", "HEAD"].includes(options.apiMethod);
+    // Reject abusive authenticated requests before consuming Clerk Backend API.
+    await rateLimit(`actor:${userId}:${read ? "read" : "write"}`, read ? 120 : 30);
+  }
   const clerk = await currentUser();
-  if (!clerk) throw new AppError(401, "Sessão inválida");
+  if (!clerk || clerk.id !== userId) throw new AppError(401, "Sessão inválida");
   const email = clerk.emailAddresses.find(
     (e) => e.id === clerk.primaryEmailAddressId,
   );
@@ -25,24 +33,13 @@ export async function requireActor(admin = false) {
     email?.verification?.status === "verified",
     allowlist,
   );
-  if (admin && role !== "admin")
-    throw new AppError(403, "Acesso restrito ao administrador.");
-  await connectDB();
-  const user = await User.findOneAndUpdate(
-    { clerkId: userId },
-    {
-      $set: {
-        name:
-          [clerk.firstName, clerk.lastName].filter(Boolean).join(" ") ||
-          email?.emailAddress ||
-          "Cliente",
-        email: email?.emailAddress,
-        role,
-      },
-      $setOnInsert: { loyaltyCount: 0, totalWashes: 0 },
-    },
-    { upsert: true, returnDocument: "after" },
-  );
+  if (admin) assertAdminRole(role);
+  const user = await syncClerkIdentity({
+    clerkId: userId,
+    name: clerkProfileName(clerk.firstName, clerk.lastName),
+    email: email?.emailAddress,
+    role,
+  });
   return { clerkId: userId, userId: String(user._id), role, user };
 }
 export async function rateLimit(key: string, limit = 60) {
@@ -72,6 +69,6 @@ export async function rateLimit(key: string, limit = 60) {
       { returnDocument: "after" },
     );
   }
-  if (record.count > limit)
+  if (!record || record.count > limit)
     throw new AppError(429, "Muitas solicitações. Aguarde um minuto.");
 }

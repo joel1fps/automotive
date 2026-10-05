@@ -1,10 +1,12 @@
 import { clerkClient } from "@clerk/nextjs/server";
-import { randomUUID } from "node:crypto";
 import { notificationText } from "@/lib/notifications";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhook } from "@clerk/nextjs/webhooks";
 import { z, ZodError } from "zod";
-import { requireActor, rateLimit } from "@/lib/auth";
+import { requireActor, rateLimit, readOwnProfile, updateOwnProfile } from "@/lib/auth";
+import { clerkProfileName, phoneSchema } from "@/lib/profile";
+import { syncClerkIdentity } from "@/lib/profile-store";
+import { serverRole } from "@/lib/access-policy";
 import {
   Appointment,
   Audit,
@@ -20,6 +22,7 @@ import {
   availableSlots,
   changeAppointment,
   createBooking,
+  deleteAppointment,
   getSettings,
   seedCatalog,
   updateSettings,
@@ -31,8 +34,11 @@ import {
   periodBounds,
   localDate,
 } from "@/lib/domain";
-import { financeQuery, financeSummary, financeWorkbook } from "@/lib/finance";
-import { controlSummary } from "@/lib/control";
+import { completeWorkbook, financeQuery, financeSummary, financeWorkbook, servicesReport, servicesWorkbook } from "@/lib/finance";
+import { correctTransaction, createManualTransaction, issueManualCoupon, transactionNets } from "@/lib/financial-operations";
+import { historyCriteria } from "@/lib/history-criteria";
+import { controlSummary, operationalQueue, queueFiltersSchema } from "@/lib/control";
+import { ACTIVE_APPOINTMENT_STATUSES } from "@/lib/appointment-state";
 import {
   actionSchema,
   bookingSchema,
@@ -44,9 +50,10 @@ import {
   serviceSchema,
   settingsSchema,
   slotSchema,
-  transactionSchema,
 } from "@/lib/validation";
 import { initialServices } from "@/lib/catalog";
+import { assertMutationOrigin, publicRateKey, readBoundedText, readJsonBody } from "@/lib/request-security";
+import { generateTracking, readAdminTracking, readPublicTracking, revokeTracking, trackingActionSchema, updateTrackingEstimate, validTrackingToken } from "@/lib/tracking";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const json = (value: unknown, status = 200) =>
@@ -54,25 +61,7 @@ const json = (value: unknown, status = 200) =>
     status,
     headers: { "Cache-Control": "no-store" },
   });
-const body = async (req: NextRequest) => {
-  assert(
-    req.headers.get("content-type")?.includes("application/json"),
-    "Envie JSON",
-    415,
-  );
-  assert(
-    Number(req.headers.get("content-length") || 0) < 300000,
-    "Corpo muito grande",
-    413,
-  );
-  const raw = await req.text();
-  assert(Buffer.byteLength(raw, "utf8") < 300000, "Corpo muito grande", 413);
-  try {
-    return JSON.parse(raw);
-  } catch {
-    throw new AppError(400, "JSON inválido");
-  }
-};
+const body = readJsonBody;
 const pageSchema = z.coerce.number().int().min(1).max(100000).default(1);
 const escapeRegex = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 async function paged(
@@ -80,14 +69,12 @@ async function paged(
   query: Record<string, unknown>,
   page: number,
   sort: Record<string, 1 | -1> = { createdAt: -1 },
+  customer = false,
 ) {
+  const find = model.find(query).sort(sort).skip((page - 1) * 30).limit(30);
+  if (customer) find.populate("userId", "name email phone");
   const [items, total] = await Promise.all([
-    model
-      .find(query)
-      .sort(sort)
-      .skip((page - 1) * 30)
-      .limit(30)
-      .lean(),
+    find.lean(),
     model.countDocuments(query),
   ]);
   return { items, total, page, pages: Math.ceil(total / 30) };
@@ -101,14 +88,37 @@ async function handler(
     const route = path.join("/");
     const method = req.method;
     const q = req.nextUrl.searchParams;
+    if (path[0] === "tracking") {
+      const trackingJson = (value: unknown, status = 200) => NextResponse.json(value, {
+        status,
+        headers: {
+          "Cache-Control": "no-store, private",
+          "X-Robots-Tag": "noindex, nofollow, noarchive",
+          "Referrer-Policy": "no-referrer",
+          ...(status === 405 ? { Allow: "GET" } : {}),
+        },
+      });
+      // All public tracking routes are read-only, even for an authenticated administrator.
+      if (method !== "GET") return trackingJson({ error: "O acompanhamento é somente de leitura." }, 405);
+      if (path.length !== 2 || !validTrackingToken(path[1])) return trackingJson({ error: "Link de acompanhamento indisponível." }, 404);
+      try {
+        await rateLimit(publicRateKey(req, "public-tracking"), 120);
+        return trackingJson(await readPublicTracking(path[1]));
+      } catch (error) {
+        if (error instanceof AppError) return trackingJson({ error: error.message }, error.status);
+        return trackingJson({ error: "Não foi possível consultar o acompanhamento. Tente novamente em instantes." }, 503);
+      }
+    }
     if (route === "webhooks/clerk" && method === "POST") {
       assert(process.env.CLERK_WEBHOOK_SECRET, "Webhook não configurado", 503);
       let event;
       try {
-        event = await verifyWebhook(req, {
+        const raw = await readBoundedText(req);
+        event = await verifyWebhook(new NextRequest(req.url, { method: "POST", headers: req.headers, body: raw }), {
           signingSecret: process.env.CLERK_WEBHOOK_SECRET,
         });
-      } catch {
+      } catch (error) {
+        if (error instanceof AppError) throw error;
         throw new AppError(400, "Assinatura de webhook inválida");
       }
       await connectDB();
@@ -121,24 +131,13 @@ async function handler(
         const allow = (process.env.ADMIN_EMAILS || "")
           .split(",")
           .map((v) => v.trim().toLowerCase());
-        const role =
-          data.public_metadata.role === "admin" ||
-          (email?.verification?.status === "verified" &&
-            allow.includes(email.email_address.toLowerCase()))
-            ? "admin"
-            : "client";
-        await User.updateOne(
-          { clerkId: data.id },
-          {
-            $set: {
-              name: [data.first_name, data.last_name].filter(Boolean).join(" "),
-              email: email?.email_address,
-              role,
-            },
-            $setOnInsert: { loyaltyCount: 0, totalWashes: 0 },
-          },
-          { upsert: true },
-        );
+        await syncClerkIdentity({
+          clerkId: data.id,
+          name: clerkProfileName(data.first_name, data.last_name),
+          email: email?.email_address,
+          role: serverRole(data.public_metadata, email?.email_address,
+            email?.verification?.status === "verified", allow),
+        });
       } else if (event.type === "user.deleted" && event.data.id)
         await User.updateOne(
           { clerkId: event.data.id },
@@ -149,16 +148,12 @@ async function handler(
         );
       return json({ received: true });
     }
-    if (method !== "GET") {
-      const origin = req.headers.get("origin");
-      if (origin)
-        assert(origin === req.nextUrl.origin, "Origem não permitida", 403);
-    }
+    assertMutationOrigin(req);
     if (route === "services" && method === "GET") {
       if (!process.env.MONGODB_URI) return json(initialServices);
       await connectDB();
       await rateLimit(
-        `public-services:${req.headers.get("x-vercel-forwarded-for") || "shared"}`,
+        publicRateKey(req, "public-services"),
         120,
       );
       await seedCatalog();
@@ -168,8 +163,11 @@ async function handler(
       if (!services.length && !(await Service.exists({}))) return json(initialServices);
       return json(services);
     }
-    const actor = await requireActor(route.startsWith("admin/"));
-    await rateLimit(`actor:${actor.clerkId}`, method === "GET" ? 120 : 30);
+    const actor = await requireActor(route.startsWith("admin/"), { apiMethod: method });
+    if (route === "profile/me") {
+      if (method === "GET") return json(await readOwnProfile(actor));
+      if (method === "PATCH") return json(await updateOwnProfile(actor, await body(req)));
+    }
     if (route === "slots" && method === "GET")
       return json(await availableSlots(dateSchema.parse(q.get("date"))));
     if (route === "appointments" && method === "POST")
@@ -181,7 +179,7 @@ async function handler(
       return json(
         await paged(
           Appointment,
-          { userId: actor.userId },
+          { userId: actor.userId, deletedAt: { $exists: false } },
           pageSchema.parse(q.get("page") || undefined),
         ),
       );
@@ -207,8 +205,63 @@ async function handler(
     if (!route.startsWith("admin/"))
       throw new AppError(404, "Rota não encontrada");
     const resource = path[1];
-    if (resource === "control" && path.length === 2 && method === "GET")
-      return json(await controlSummary(dateSchema.parse(q.get("date"))));
+    if (["queue", "control"].includes(resource) && path.length === 2 && method === "GET") {
+      const filters = queueFiltersSchema.parse({ search: q.get("search") || undefined, status: q.get("status") || undefined });
+      const hasPeriod = ["date", "range", "from", "to"].some((key) => q.has(key));
+      if (resource === "queue" && !hasPeriod) return json(await operationalQueue(undefined, filters));
+      const date = dateSchema.parse(q.get("date") || localDate(new Date()));
+      const range = z.enum(["day", "week", "month"]).default("day").parse(q.get("range") || undefined);
+      const bounds = q.get("from") || q.get("to")
+        ? filterBounds(dateSchema.parse(q.get("from")), dateSchema.parse(q.get("to")))
+        : periodBounds(range, date);
+      assert(+bounds.to - +bounds.from <= 366 * 86400000, "Selecione até um ano por consulta");
+      const criterion = z.enum(historyCriteria).default("scheduled").parse(q.get("criterion") || undefined);
+      return resource === "queue"
+        ? json(await operationalQueue({ ...bounds, page: pageSchema.parse(q.get("page") || undefined), criterion, ...filters }))
+        : json(await controlSummary(date, range, bounds, criterion, filters));
+    }
+    if (resource === "audit" && path.length === 2 && method === "GET") {
+      const page = pageSchema.parse(q.get("page") || undefined);
+      const action = z.string().max(80).regex(/^[a-z_]+$/).optional().parse(q.get("action") || undefined);
+      const appointmentId = q.get("appointmentId") ? objectId.parse(q.get("appointmentId")) : undefined;
+      const bounds = q.get("from") || q.get("to")
+        ? filterBounds(dateSchema.parse(q.get("from")), dateSchema.parse(q.get("to"))) : undefined;
+      if (bounds) assert(+bounds.to - +bounds.from <= 366 * 86400000, "Selecione até um ano por consulta");
+      const query = {
+        ...(action ? { action } : {}), ...(appointmentId ? { appointmentId } : {}),
+        ...(bounds ? { createdAt: { $gte: bounds.from, $lt: bounds.to } } : {}),
+      };
+      const [entries, total] = await Promise.all([
+        Audit.find(query).select("action reason createdAt adminClerkId userId appointmentId transactionId fromStatus toStatus before after estimatedCompletionBefore estimatedCompletionAfter details")
+          .sort({ createdAt: -1, _id: -1 }).skip((page - 1) * 30).limit(30).lean(),
+        Audit.countDocuments(query),
+      ]);
+      const clerkIds = [...new Set(entries.flatMap((entry) => entry.adminClerkId ? [entry.adminClerkId] : []))];
+      const userIds = [...new Set(entries.flatMap((entry) => entry.userId ? [String(entry.userId)] : []))];
+      const people = clerkIds.length || userIds.length
+        ? await User.find({ $or: [{ clerkId: { $in: clerkIds } }, { _id: { $in: userIds } }] }).select("clerkId name").lean() : [];
+      const admins = new Map(people.map((person) => [person.clerkId, person.name]));
+      const clients = new Map(people.map((person) => [String(person._id), person.name]));
+      const items = entries.map((entry) => {
+        const details = entry.details || {};
+        const clientName = details.clientName || (entry.userId ? clients.get(String(entry.userId)) : undefined);
+        return {
+          _id: String(entry._id), action: entry.action, reason: entry.reason, createdAt: entry.createdAt,
+          adminClerkId: entry.adminClerkId,
+          actorName: entry.adminClerkId ? admins.get(entry.adminClerkId) || "Administrador" : clientName || "Cliente",
+          appointmentId: entry.appointmentId ? String(entry.appointmentId) : undefined,
+          transactionId: entry.transactionId ? String(entry.transactionId) : undefined,
+          clientName, fromStatus: entry.fromStatus, toStatus: entry.toStatus, before: entry.before, after: entry.after,
+          estimatedCompletionBefore: entry.estimatedCompletionBefore, estimatedCompletionAfter: entry.estimatedCompletionAfter,
+          details: {
+            clientName: details.clientName, serviceName: details.serviceName,
+            ...(details.vehicle ? { vehicle: { model: details.vehicle.model, plate: details.vehicle.plate } } : {}),
+            scheduledAt: details.scheduledAt, quotedPrice: details.quotedPrice, finalPrice: details.finalPrice,
+          },
+        };
+      });
+      return json({ items, total, page, pages: Math.ceil(total / 30) });
+    }
     if(resource === "catalog-reset" && method === "POST") {
       await Service.db.transaction(async session => {
         for(const service of initialServices) await Service.updateOne({slug:service.slug},{$set:{...service,imageUrl:"",vehicleTypes: "vehicleTypes" in service ? service.vehicleTypes : []}},{upsert:true,session});
@@ -217,39 +270,59 @@ async function handler(
       return json({restored:true});
     }
     const id =
-      path[2] && ["appointments", "services", "clients"].includes(resource)
+      path[2] && path[2] !== "calendar" && ["appointments", "services", "clients", "transactions"].includes(resource)
         ? objectId.parse(path[2])
         : undefined;
+    if (resource === "appointments" && id && path[3] === "tracking" && path.length === 4) {
+      if (method === "GET") return json(await readAdminTracking(id));
+      if (method === "POST") {
+        const input = trackingActionSchema.parse(await body(req));
+        return json(await generateTracking(id, input.action, actor.clerkId));
+      }
+      if (method === "DELETE") return json(await revokeTracking(id, actor.clerkId));
+      if (method === "PATCH") return json(await updateTrackingEstimate(id, await body(req), actor.clerkId));
+    }
     if (resource === "appointments" && id && path[3] === "notify" && method === "POST") {
-      const input = z.object({channel:z.enum(["email","whatsapp"])}).parse(await body(req));
-      const appointment = await Appointment.findById(id);
+      const input = z.strictObject({channel:z.enum(["email","whatsapp"])}).parse(await body(req));
+      const appointment = await Appointment.findOne({ _id: id, deletedAt: { $exists: false } });
       assert(appointment, "Agendamento não encontrado",404);
-      const customer = await User.findById(appointment.userId);
-      assert(customer, "Cadastre o cliente e seu contato antes de enviar",400);
+      const customer = appointment.userId ? await User.findById(appointment.userId) : null;
       const message = notificationText(appointment);
       if(input.channel === "whatsapp") {
-        const phone = String(customer.phone || "").replace(/\D/g,"");
-        assert(phone.length >= 10 && phone.length <= 15,"Cadastre o WhatsApp do cliente com DDD na aba Clientes");
-        return json({url: "https://wa.me/" + (phone.length <= 11 ? "55" : "") + phone + "?text=" + encodeURIComponent(message)});
+        const parsedPhone = phoneSchema.safeParse(customer?.phone || appointment.guestPhone || "");
+        assert(parsedPhone.success, "Cadastre um WhatsApp válido com DDD no perfil do cliente ou atendimento avulso");
+        return json({url: "https://wa.me/" + parsedPhone.data + "?text=" + encodeURIComponent(message)});
       }
       assert(process.env.RESEND_API_KEY && process.env.EMAIL_FROM,"Configure RESEND_API_KEY e EMAIL_FROM para enviar e-mails",503);
-      assert(customer.email,"Cliente sem e-mail");
+      assert(customer?.email,"Cliente sem e-mail cadastrado");
       const response = await fetch("https://api.resend.com/emails", {method:"POST",headers:{Authorization:"Bearer " + process.env.RESEND_API_KEY,"Content-Type":"application/json","Idempotency-Key": "appointment-" + id + "-" + appointment.status},body:JSON.stringify({from:process.env.EMAIL_FROM,to:[customer.email],subject:"Automotive — atualização do seu serviço",text:message})});
       assert(response.ok,"O provedor não aceitou o envio. Confira a configuração de e-mail",502);
       await Audit.create({adminClerkId:actor.clerkId,action:"email_notification",reason: id + ":" + appointment.status});
       return json({sent:true});
     }
+    if (resource === "appointments" && path[2] === "calendar" && path.length === 3 && method === "GET") {
+      const date = dateSchema.parse(q.get("date") || localDate(new Date()));
+      const range = z.enum(["day", "week", "month"]).default("month").parse(q.get("range") || undefined);
+      const status = z.enum(["pending", "confirmed", "arrived", "in_progress", "ready", "completed", "delivered", "cancelled", "rejected", "returned"]).optional().parse(q.get("status") || undefined);
+      const bounds = periodBounds(range, date);
+      const days = await Appointment.aggregate([
+        { $match: { deletedAt: { $exists: false }, scheduledAt: { $gte: bounds.from, $lt: bounds.to }, ...(status ? { status } : {}) } },
+        { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$scheduledAt", timezone: "America/Fortaleza" } }, total: { $sum: 1 } } },
+        { $sort: { _id: 1 } }, { $project: { _id: 0, date: "$_id", total: 1 } },
+      ]);
+      return json({ days, total: days.reduce((sum, day) => sum + day.total, 0) });
+    }
     if (resource === "appointments") {
       if (method === "GET" && !id) {
         const status = z
-          .enum(["pending", "confirmed", "completed", "rejected", "cancelled", "arrived", "in_progress", "ready", "delivered", "active"])
+          .enum(["pending", "confirmed", "completed", "rejected", "cancelled", "arrived", "in_progress", "ready", "delivered", "returned", "active"])
           .optional()
           .parse(q.get("status") || undefined);
         const date = q.get("date")
           ? dateSchema.parse(q.get("date"))
           : undefined;
         const range = z
-          .enum(["day", "week"])
+          .enum(["day", "week", "month"])
           .default("day")
           .parse(q.get("range") || undefined);
         const bounds = date ? periodBounds(range, date) : undefined;
@@ -257,13 +330,15 @@ async function handler(
           await paged(
             Appointment,
             {
-              ...(status ? { status: status === "active" ? { $in: ["pending", "confirmed", "arrived", "in_progress", "ready", "completed", "delivered"] } : status } : {}),
+              deletedAt: { $exists: false },
+              ...(status ? { status: status === "active" ? { $in: ACTIVE_APPOINTMENT_STATUSES } : status } : {}),
               ...(bounds
                 ? { scheduledAt: { $gte: bounds.from, $lt: bounds.to } }
                 : {}),
             },
             pageSchema.parse(q.get("page") || undefined),
             { scheduledAt: 1 },
+            true,
           ),
         );
       }
@@ -284,6 +359,8 @@ async function handler(
             actor.clerkId,
           ),
         );
+      if (method === "DELETE" && id && path.length === 3)
+        return json(await deleteAppointment(id, await body(req), actor.clerkId));
     }
     if (resource === "services") {
       await seedCatalog();
@@ -323,7 +400,7 @@ async function handler(
       }
     }
     if (resource === "clients" && id && path[3] === "role" && method === "PATCH") {
-      const input=z.object({role:z.enum(["admin","client"])}).parse(await body(req));
+      const input=z.strictObject({role:z.enum(["admin","client"])}).parse(await body(req));
       const target=await User.findById(id);
       assert(target,"Cliente não encontrado",404);
       assert(target.clerkId !== actor.clerkId,"Você não pode alterar sua própria permissão");
@@ -361,11 +438,11 @@ async function handler(
         assert(client, "Cliente não encontrado", 404);
         return json({
           client,
-          appointments: await Appointment.find({ userId: id })
+          appointments: await Appointment.find({ userId: id, deletedAt: { $exists: false } })
             .sort({ scheduledAt: -1 })
             .limit(100)
             .lean(),
-          audit: await Audit.find({ userId: id })
+          audit: await Audit.find({ userId: id, action: "loyalty_adjustment" })
             .sort({ createdAt: -1 })
             .limit(100)
             .lean(),
@@ -389,12 +466,7 @@ async function handler(
       }
     }
     if (resource === "coupons" && method === "POST") {
-      const input=z.object({userId:objectId,vehicle:clientSchema.shape.vehicles.element,expiresAt:z.iso.datetime({offset:true}),reason:z.string().trim().min(5).max(500)}).parse(await body(req));
-      assert(new Date(input.expiresAt)>new Date(),"Validade deve ser futura");
-      assert(await User.exists({_id:input.userId}),"Cliente não encontrado",404);
-      const coupon=await Coupon.create({userId:input.userId,vehiclePlate:input.vehicle.plate,vehicleType:input.vehicle.type,issuedAt:new Date(),expiresAt:new Date(input.expiresAt),issueKey:"manual:"+randomUUID()});
-      await Audit.create({adminClerkId:actor.clerkId,userId:input.userId,action:"manual_coupon",reason:input.reason});
-      return json(coupon,201);
+      return json(await issueManualCoupon(await body(req), actor.clerkId), 201);
     }
     if (resource === "coupons" && method === "GET") {
       await Coupon.updateMany(
@@ -406,7 +478,7 @@ async function handler(
         { $set: { status: "expired" } },
       );
       const status = z
-        .enum(["available", "used", "expired"])
+        .enum(["available", "used", "expired", "revoked"])
         .optional()
         .parse(q.get("status") || undefined);
       return json(
@@ -471,27 +543,11 @@ async function handler(
         return json(updated);
       }
     }
-    if (resource === "transactions" || resource === "finance") {
+    if (resource === "transactions" && id && path[3] === "correction" && path.length === 4 && method === "POST")
+      return json(await correctTransaction(id, await body(req), actor.clerkId), 201);
+    if (resource === "transactions" || resource === "finance" || resource === "service-report") {
       if (resource === "transactions" && method === "POST") {
-        const input = transactionSchema.parse(await body(req));
-        assert(
-          new Date(input.date) <= new Date(),
-          "Lançamento não pode ter data futura",
-        );
-        const customer = input.userId
-          ? await User.findById(input.userId)
-          : null;
-        assert(!input.userId || customer, "Cliente não encontrado", 404);
-        return json(
-          await Transaction.create({
-            ...input,
-            date: new Date(input.date),
-            source: "manual",
-            createdBy: actor.clerkId,
-            clientName: customer?.name,
-          }),
-          201,
-        );
+        return json(await createManualTransaction(await body(req), actor.clerkId), 201);
       }
       if (method === "GET") {
         const range = z
@@ -535,25 +591,33 @@ async function handler(
             .optional()
             .parse(q.get("paymentMethod") || undefined),
         };
-        if (resource === "transactions")
-          return json(
-            await paged(
+        if (resource === "transactions") {
+          const result = await paged(
               Transaction,
               financeQuery(filter),
               pageSchema.parse(q.get("page") || undefined),
               { date: -1 },
-            ),
-          );
+            );
+          return json({ ...result, items: await transactionNets(result.items) });
+        }
+        const serviceFilter = { ...bounds, category: filter.category, criterion: z.enum(["ready", "delivered"]).default("ready").parse(resource === "service-report" || q.get("report") === "services" ? q.get("criterion") || undefined : undefined) };
+        if (resource === "service-report" && path.length === 2) return json(await servicesReport(serviceFilter, pageSchema.parse(q.get("page") || undefined)));
         if (path[2] === "summary") return json(await financeSummary(filter));
         if (path[2] === "export") {
-          const buffer = await financeWorkbook(filter);
+          const report = z.enum(["receipts", "services", "complete"]).default("receipts").parse(q.get("report") || undefined);
+          z.literal("xlsx").default("xlsx").parse(q.get("format") || undefined);
+          const vehicleCriterion = z.enum(historyCriteria).default("scheduled").parse(report === "complete" ? q.get("criterion") || undefined : undefined);
+          await rateLimit(`finance-export:${actor.clerkId}`, 5);
+          const buffer = report === "complete" ? await completeWorkbook(filter, vehicleCriterion)
+            : report === "services" ? await servicesWorkbook(serviceFilter) : await financeWorkbook(filter);
+          const filename = `automotive-${{ receipts: "faturamento", services: "servicos", complete: "completo" }[report]}-${localDate(bounds.from)}-a-${localDate(new Date(+bounds.to - 1))}.xlsx`;
           return new NextResponse(new Uint8Array(buffer), {
             headers: {
               "Content-Type":
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-              "Content-Disposition":
-                'attachment; filename="automotive-financeiro.xlsx"',
+              "Content-Disposition": `attachment; filename="${filename}"`,
               "Cache-Control": "no-store",
+              "X-Content-Type-Options": "nosniff",
             },
           });
         }

@@ -1,0 +1,19 @@
+.details, .section { display: grid; gap: 16px; }
+.details { margin-bottom: 24px; }
+.details h3 { text-transform: none; font-family: var(--font-body), sans-serif; letter-spacing: 0; }
+.dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.dates dt { color: var(--muted); font-size: .8rem; margin-bottom: 5px; }
+.dates dd { margin: 0; font-size: .9rem; }
+.section { padding-top: 24px; border-top: 1px solid var(--border); }
+.section h3 { text-transform: none; font-family: var(--font-body), sans-serif; font-size: 1.15rem; letter-spacing: 0; }
+.section p, .section small { line-height: 1.6; }
+.link { display: grid; gap: 8px; }
+.link input { min-width: 0; font-size: .85rem; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.estimate { display: grid; gap: 12px; padding-top: 16px; }
+.estimate label { display: grid; gap: 8px; }
+@media (max-width: 560px) {
+  .dates { grid-template-columns: 1fr; }
+  .actions > * { flex: 1 1 100%; justify-content: center; }
+  .estimate input { min-width: 0; }
+}
