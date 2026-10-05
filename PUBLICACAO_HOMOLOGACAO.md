@@ -15,6 +15,8 @@ Local e Vercel compartilham atualmente usuários de teste, atendimentos, catálo
 
 As chaves Clerk, a URI MongoDB e a lista administrativa foram cadastradas diretamente nas variáveis protegidas da Vercel, após autorização. Valores não constam neste documento nem no GitHub. A URL canônica e o alias automático do próprio projeto estão configurados nas origens autorizadas.
 
+O webhook da instância Clerk Development está configurado para `https://automotive-sigma.vercel.app/api/webhooks/clerk`, somente com `user.created`, `user.updated` e `user.deleted`. Seu segredo de assinatura está cadastrado como Secret nas variáveis Production e Preview da Vercel. Essas alterações de configuração exigem uma nova publicação para entrar em vigor.
+
 O catálogo e os índices necessários foram preparados de forma idempotente, sem sobrescrever preços ou limpar registros existentes. Nenhuma regra de rede do Atlas foi alterada durante a publicação; a conta já tinha uma entrada permitindo conexões de qualquer origem, ainda exigindo credenciais do banco.
 
 ## Verificação realizada
@@ -31,7 +33,6 @@ O ensaio online não criou usuários, atendimentos ou lançamentos fictícios. A
 
 ## Pendências antes da operação real
 
-- Concluir o webhook Clerk para criação, atualização e exclusão de usuários e verificar uma entrega assinada.
 - Confirmar um domínio próprio e seu DNS, criar/configurar Clerk Production e usar uma base de operação separada, com usuário restrito e índices preparados. Usuários e identidades de desenvolvimento não são automaticamente usuários da instância de produção.
 - Revisar o plano Vercel para uso comercial; nenhum plano pago ou cobrança adicional foi contratado nesta publicação.
 - Configurar Resend e remetente de domínio verificado caso os avisos por e-mail sejam usados. WhatsApp continua como envio manual iniciado pelo painel.
